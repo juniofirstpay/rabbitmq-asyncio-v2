@@ -1,4 +1,4 @@
-from rbmq_aio_client_v2.publisher import Publisher
+from src.publisher import Publisher
 import asyncio
 
 config={

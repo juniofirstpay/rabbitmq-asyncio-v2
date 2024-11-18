@@ -4,9 +4,9 @@ import json
 import traceback
 import threading
 import asyncio
-from rbmq_aio_client_v2.subscriber import Subscriber
-from rbmq_aio_client_v2.server import HealthCheckServer
-from rbmq_aio_client_v2.test_publisher import config
+from src.subscriber import Subscriber
+from src.server import HealthCheckServer
+from tests.test_publisher import config
 # from app.env import rabbitmq_conf_v2
 # from app.events.paytm import PaytmWebhook
 from structlog import get_logger
