@@ -1,0 +1,13 @@
+README.md
+pyproject.toml
+src/rbmq_aio_client_v2/__init__.py
+src/rbmq_aio_client_v2/publisher.py
+src/rbmq_aio_client_v2/server.py
+src/rbmq_aio_client_v2/subscriber.py
+src/rbmq_aio_client_v2.egg-info/PKG-INFO
+src/rbmq_aio_client_v2.egg-info/SOURCES.txt
+src/rbmq_aio_client_v2.egg-info/dependency_links.txt
+src/rbmq_aio_client_v2.egg-info/requires.txt
+src/rbmq_aio_client_v2.egg-info/top_level.txt
+tests/test_publisher.py
+tests/test_subscriber.py

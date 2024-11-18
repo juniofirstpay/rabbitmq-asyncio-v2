@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["rbmq_aio_client_v2"]
+
+[project]
+name = "rbmq-aio-client-v2"
+version = "0.0.1"
+authors = [
+  { name="Nirbhay Gupta", email="nirbhay.gupta@junio.in" },
+]
+description = "Async rabbitmq project"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies=[
+    "pytest>=6.0",
+    "black>=23.0",
+    "flake8>=6.0",
+    "mypy>=1.0",
+]
+
+
+[tool.pytest.ini_options]
+addopts = "-rSA"
+testpaths = [
+  "tests"
+]
