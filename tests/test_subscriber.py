@@ -1,4 +1,3 @@
-
 import click
 import json
 import traceback
@@ -7,22 +6,22 @@ import asyncio
 from src.subscriber import Subscriber
 from src.server import HealthCheckServer
 from tests.test_publisher import config
+
 # from app.env import rabbitmq_conf_v2
 # from app.events.paytm import PaytmWebhook
 from structlog import get_logger
 
 rabbitmq_conf_v2 = config
 
+
 class PaytmWebhook:
     def process(self, data):
         print("data", data)
 
-actions_dict = {
-    'PAYTM_WEBHOOK1': PaytmWebhook()
-}
+
+actions_dict = {"PAYTM_WEBHOOK1": PaytmWebhook()}
 
 LOGGER = get_logger()
-
 
 
 @click.command()
@@ -36,15 +35,15 @@ def run(connection: "str", queue: "str", health_port: "str", debug: "str"):
         print("HERE")
         print(connection, queue)
         # HealthCheckServer(port=int(health_port), log=True).start()
-        
+
         # Define on_message callback function
         def on_message(payload: dict):
             try:
                 if isinstance(payload, str):
                     payload = json.loads(payload)
 
-                action = payload.get('action')
-                attributes = payload.get('attributes')
+                action = payload.get("action")
+                attributes = payload.get("attributes")
                 print("Action:", action)
                 print("Attributes:", attributes)
 
@@ -57,7 +56,7 @@ def run(connection: "str", queue: "str", health_port: "str", debug: "str"):
             except Exception as e:
                 print("Error processing message:", e)
                 traceback.print_exc()
-        
+
         # Initialize and run Subscriber
         await Subscriber(
             rabbitmq_conf_v2, on_message, debug=(True if debug == "true" else False)
@@ -67,5 +66,5 @@ def run(connection: "str", queue: "str", health_port: "str", debug: "str"):
     asyncio.run(run_async())
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     run()

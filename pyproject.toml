@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["rbmq_aio_client_v2"]
+include = ["rbmq_aio_client"]
 
 [project]
-name = "rbmq-aio-client-v2"
+name = "rbmq-aio-client"
 version = "0.0.1"
 authors = [
   { name="Nirbhay Gupta", email="nirbhay.gupta@junio.in" },

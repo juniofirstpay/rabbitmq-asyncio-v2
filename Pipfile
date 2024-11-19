@@ -4,8 +4,12 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
+aio-pika = "*"
+structlog = "*"
+addict = "*"
 
 [dev-packages]
+black = "*"
 
 [requires]
-python_version = "3.10"
+python_version = "3.11"
