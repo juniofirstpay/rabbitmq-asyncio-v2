@@ -1,10 +1,9 @@
 import click
 import json
 import traceback
-import threading
 import asyncio
-from src.subscriber import Subscriber
-from src.server import HealthCheckServer
+from rbmq_aio_client.subscriber import Subscriber
+from rbmq_aio_client.server import HealthCheckServer
 from tests.test_publisher import config
 
 # from app.env import rabbitmq_conf_v2
