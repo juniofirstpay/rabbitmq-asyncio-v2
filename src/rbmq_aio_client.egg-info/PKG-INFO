@@ -1,5 +1,5 @@
 Metadata-Version: 2.1
-Name: rbmq-aio-client-v2
+Name: rbmq-aio-client
 Version: 0.0.1
 Summary: Async rabbitmq project
 Author-email: Nirbhay Gupta <nirbhay.gupta@junio.in>

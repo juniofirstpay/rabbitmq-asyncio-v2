@@ -1,13 +1,11 @@
 import json
-import time
 import addict
 import asyncio
 import aio_pika
 import aio_pika.abc
-import threading
 import queue
 from structlog import get_logger
-from typing import List, Union
+from typing import Union
 from datetime import datetime, UTC
 
 
@@ -105,16 +103,16 @@ class Publisher:
         delay_counter = 1
         while self.__should_loop:
             try:
-                connection = await self.__get_connection(connection_type)
-                channel = await self.__get_channel(connection)
+                self.__connection = await self.__get_connection(connection_type)
+                channel = await self.__get_channel(self.__connection)
                 exchange_obj = await self.__get_exchange(exchange, channel)
 
                 delay_counter = 1
                 await self.__process_message_queue(exchange_obj)
 
-                await connection.close()
+                await self.__connection.close()
             except Exception as e:
-                asyncio.sleep(0.3 * delay_counter)
+                await asyncio.sleep(0.3 * delay_counter)
                 delay_counter += 1
                 self.__logger.error(e)
 
@@ -124,7 +122,7 @@ class Publisher:
         #this assumes the loop is already running
         loop = asyncio.get_event_loop()
 
-        loop.create_task(self.__main(connection, exchange))
+        self.__task = loop.create_task(self.__main(connection, exchange))
 
         # if self.__is_daemon:
         #     self.__queue = queue.Queue(maxsize=queue_size)
@@ -132,6 +130,15 @@ class Publisher:
         # # else:
         # await self.__run_blocking(connection, exchange)
         # # asyncio.create_task(self.__main(connection, exchange))
+
+    async def stop(self):
+        self.__should_loop = False
+        if self.__connection:
+            try:
+                await self.__connection.close()
+            except Exception as e:
+                self.__logger.error(e)
+        self.__task.cancel()
 
     async def push(
         self,

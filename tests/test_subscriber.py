@@ -37,7 +37,7 @@ def run(connection: "str", queue: "str", health_port: "str", debug: "str"):
         # HealthCheckServer(port=int(health_port), log=True).start()
 
         # Define on_message callback function
-        def on_message(payload: dict):
+        async def on_message(payload: dict):
             try:
                 if isinstance(payload, str):
                     payload = json.loads(payload)
@@ -52,7 +52,7 @@ def run(connection: "str", queue: "str", health_port: "str", debug: "str"):
                     LOGGER.warning("[action] not setup", action=action, payload=payload)
                     return
 
-                action_func.process(attributes)
+                await action_func.process(attributes)
             except Exception as e:
                 print("Error processing message:", e)
                 traceback.print_exc()

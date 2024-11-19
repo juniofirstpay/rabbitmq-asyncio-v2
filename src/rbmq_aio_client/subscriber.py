@@ -5,7 +5,6 @@ import asyncio
 import aio_pika
 import aio_pika.abc
 import pprint
-import time
 import traceback
 from typing import Union
 from structlog import get_logger
@@ -113,14 +112,15 @@ class Subscriber:
                                         id=message_info.get("message_id"),
                                     )
                                 if self.__expose_connection == True:
-                                    self.__callback(
+                                    # callback needs to be await to be processed
+                                    await self.__callback(
                                         payload,
                                         connection=connection,
                                         loop=loop,
                                         exchange=exchange,
                                     )
                                 else:
-                                    self.__callback(payload)
+                                    await self.__callback(payload)
 
                                 self.__logger.info(
                                     "Message processed successfully",
@@ -130,7 +130,6 @@ class Subscriber:
                             print(e)
                             raise e
         except Exception as e:
-            print(e)
             self.__logger.error(e)
             self.__logger.debug(traceback.format_exc())
             self.__failure_sleep_counter += 1
@@ -139,7 +138,7 @@ class Subscriber:
                     self.__failure_sleep_counter * 3
                 )
             )
-            time.sleep(self.__failure_sleep_counter * 3)
+            await asyncio.sleep(self.__failure_sleep_counter * 3)
 
     async def run(self, connection, queue):
         while True:

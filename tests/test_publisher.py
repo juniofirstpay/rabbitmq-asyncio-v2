@@ -1,4 +1,4 @@
-from src.publisher import Publisher
+from rbmq_aio_client.publisher import Publisher
 import asyncio
 
 config = {
@@ -62,9 +62,9 @@ config = {
 
 async def main():
     publisher = Publisher(config=config, debug=True)
-
-    await publisher.mark_daemon()
-    await publisher.run("default", "default")
+    publisher.run("default", "default")
+    
+    
     await publisher.push(
         "oms.django.test",
         "test-id-1",
@@ -75,9 +75,6 @@ async def main():
     )
     # await publisher.run('default', 'default')
     await asyncio.sleep(5)
-
-    # Stop the Publisher after test run
-    publisher._Publisher__should_loop = False
 
 
 if __name__ == "__main__":
