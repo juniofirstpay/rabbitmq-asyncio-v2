@@ -118,8 +118,8 @@ class Publisher:
 
     async def run(self, connection: str, exchange: str, queue_size=1000000):
         self.__queue = asyncio.Queue(maxsize=queue_size)
-        
-        #this assumes the loop is already running
+
+        # this assumes the loop is already running
         loop = asyncio.get_event_loop()
 
         self.__task = loop.create_task(self.__main(connection, exchange))
@@ -160,8 +160,9 @@ class Publisher:
         )
         await self.__queue.put((message, routing_key, publish_timeout))
         if self.__debug:
-            self.__logger.info("message put in queue", queue=self.__queue, quesize=self.__queue.qsize())
+            self.__logger.info(
+                "message put in queue", queue=self.__queue, quesize=self.__queue.qsize()
+            )
 
-
-        # this allows for method chaining    
+        # this allows for method chaining
         return self

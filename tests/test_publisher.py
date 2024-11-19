@@ -63,8 +63,7 @@ config = {
 async def main():
     publisher = Publisher(config=config, debug=True)
     publisher.run("default", "default")
-    
-    
+
     await publisher.push(
         "oms.django.test",
         "test-id-1",

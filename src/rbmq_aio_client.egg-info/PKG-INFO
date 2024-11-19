@@ -1,16 +1,15 @@
 Metadata-Version: 2.1
 Name: rbmq-aio-client
-Version: 0.0.1
+Version: 0.0.2
 Summary: Async rabbitmq project
-Author-email: Nirbhay Gupta <nirbhay.gupta@junio.in>
+Author-email: Rashmi Sahu <rashmi.sahu@junio.in>, Nirbhay Gupta <nirbhay.gupta@junio.in>
 Classifier: Programming Language :: Python :: 3
 Classifier: License :: OSI Approved :: MIT License
 Classifier: Operating System :: OS Independent
 Requires-Python: >=3.8
 Description-Content-Type: text/markdown
-Requires-Dist: pytest>=6.0
-Requires-Dist: black>=23.0
-Requires-Dist: flake8>=6.0
-Requires-Dist: mypy>=1.0
+Requires-Dist: addict==2.4.0
+Requires-Dist: aio-pika==9.4.3
+Requires-Dist: structlog
 
 # rabbitmq-asyncio-v2
