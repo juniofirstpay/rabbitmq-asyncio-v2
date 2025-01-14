@@ -118,7 +118,7 @@ class RBMQAsyncioClient:
                         type=exchange_config.type,
                         durable=exchange_config.durable,
                         auto_delete=exchange_config.auto_delete,
-                        intenral=exchange_config.internal,
+                        internal=exchange_config.internal,
                         passive=exchange_config.passive,
                         timeout=exchange_config.timeout
                     )
