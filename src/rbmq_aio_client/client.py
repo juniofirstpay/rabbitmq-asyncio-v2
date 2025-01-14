@@ -74,6 +74,19 @@ class RBMQAsyncioClient:
         await self.__channel_pool.close()
         await self.__connection_pool.close()
 
+    async def configure(self):
+        self.__message_queue = asyncio.queues.Queue(maxsize=self.__queue_max_size)
+        self.__connection_pool = aio_pika.pool.Pool(self.get_connection, 
+                                                    max_size=self.__connection_max_count)
+
+        self.__channel_pool = aio_pika.pool.Pool(self.get_channel, 
+                                                 max_size=self.__channel_max_count)
+        
+    async def destroy(self):
+        await self.__message_queue.join()
+        await self.__channel_pool.close()
+        await self.__connection_pool.close()
+
 
     async def create_publisher(self, exchange_config: ExchangeConfig):
         delay_counter = 0
