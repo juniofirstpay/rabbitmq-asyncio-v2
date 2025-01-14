@@ -1,6 +1,7 @@
 README.md
 pyproject.toml
 src/rbmq_aio_client/__init__.py
+src/rbmq_aio_client/client.py
 src/rbmq_aio_client/publisher.py
 src/rbmq_aio_client/server.py
 src/rbmq_aio_client/subscriber.py
