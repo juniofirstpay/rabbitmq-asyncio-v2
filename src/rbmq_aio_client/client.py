@@ -114,13 +114,13 @@ class RBMQAsyncioClient:
                 async with self.__channel_pool.acquire() as ch: # type: aio_pika.abc.AbstractChannel
                     channel: aio_pika.abc.AbstractChannel = ch
                     exchange: aio_pika.abc.AbstractExchange = await channel.declare_exchange(
-                        exchange_config.name,
-                        exchange_config.type,
-                        exchange_config.durable,
-                        exchange_config.auto_delete,
-                        exchange_config.internal,
-                        exchange_config.passive,
-                        exchange_config.timeout
+                        name=exchange_config.name,
+                        type=exchange_config.type,
+                        durable=exchange_config.durable,
+                        auto_delete=exchange_config.auto_delete,
+                        intenral=exchange_config.internal,
+                        passive=exchange_config.passive,
+                        timeout=exchange_config.timeout
                     )
                     queue: aio_pika.Queue = await channel.declare_queue(
                         queue_config.name,
@@ -163,7 +163,7 @@ class RBMQAsyncioClient:
 
     async def run_subscriber(self, exchange_config: ExchangeConfig, queue_config: QueueConfig, callback: Callable[[Any], Awaitable[Any]]):
         loop = asyncio.get_running_loop()
-        return loop.create_task(self.create_publisher(exchange_config, queue_config, callback))
+        return loop.create_task(self.create_subscriber(exchange_config, queue_config, callback))
 
     async def run_healthcheck_server(self, port: int = 8000):
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -182,7 +182,7 @@ class RBMQAsyncioClient:
         self,
         routing_key: str,
         message_id: str,
-        payload: str,
+        payload: Any,
         persistent: int = aio_pika.DeliveryMode.PERSISTENT,
         expiration: int = 86400,
         publish_timeout: int = 1,

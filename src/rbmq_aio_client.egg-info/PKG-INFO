@@ -1,6 +1,6 @@
 Metadata-Version: 2.2
 Name: rbmq-aio-client
-Version: 0.0.3
+Version: 0.0.4
 Summary: Async rabbitmq project
 Author-email: Rashmi Sahu <rashmi.sahu@junio.in>, Nirbhay Gupta <nirbhay.gupta@junio.in>
 Classifier: Programming Language :: Python :: 3
