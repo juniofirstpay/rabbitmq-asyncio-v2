@@ -82,13 +82,13 @@ class RBMQAsyncioClient:
                 async with self.__channel_pool.acquire() as ch: # type: aio_pika.abc.AbstractChannel
                     channel: aio_pika.abc.AbstractChannel = ch
                     exchange: aio_pika.abc.AbstractExchange = await channel.declare_exchange(
-                        exchange_config.name,
-                        exchange_config.type,
-                        exchange_config.durable,
-                        exchange_config.auto_delete,
-                        exchange_config.internal,
-                        exchange_config.passive,
-                        exchange_config.timeout
+                        name=exchange_config.name,
+                        type=exchange_config.type,
+                        durable=exchange_config.durable,
+                        auto_delete=exchange_config.auto_delete,
+                        internal=exchange_config.internal,
+                        passive=exchange_config.passive,
+                        timeout=exchange_config.timeout
                     )
                     while True:
                         item: Tuple[aio_pika.Message, str, int] = await self.__message_queue.get()
@@ -123,7 +123,7 @@ class RBMQAsyncioClient:
                         timeout=exchange_config.timeout
                     )
                     queue: aio_pika.Queue = await channel.declare_queue(
-                        queue_config.name,
+                        name=queue_config.name,
                         durable=queue_config.durable,
                         auto_delete=queue_config.auto_delete,
                         exclusive=queue_config.exclusive
@@ -135,13 +135,23 @@ class RBMQAsyncioClient:
                     async with queue.iterator() as queue_iter:
                         async for message in queue_iter:
                             try:
-                                async with message.process(requeue=True):
+                                async with message.process(ignore_processed=True):
                                     try:
                                         payload = json.loads(message.body.decode())
-                                    except:
+                                    except json.JSONDecodeError as e:
                                         payload = ast.literal_eval(message.body.decode())
+                                    except:
+                                        await message.reject()
 
-                                    await callback(payload)
+                                    try:
+                                        ack = await callback(payload)
+                                        if ack:
+                                            await message.ack()
+                                        else:
+                                            await message.reject()
+                                    except Exception as e:
+                                        logger.error(e)
+                                        await message.reject(requeue=True)
                             except Exception as e:
                                 logger.error(e, exc_info=self.__debug)
 
