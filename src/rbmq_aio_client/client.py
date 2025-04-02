@@ -83,7 +83,6 @@ class RBMQAsyncioClient:
                                                  max_size=self.__channel_max_count)
         
     async def destroy(self):
-        await self.__message_queue.join()
         await self.__channel_pool.close()
         await self.__connection_pool.close()
 
