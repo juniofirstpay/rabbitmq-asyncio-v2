@@ -167,14 +167,6 @@ class RBMQAsyncioClient:
                                         await message.reject(requeue=True)
                             except Exception as e:
                                 logger.error(e, exc_info=self.__debug)
-
-                    while True:
-                        message, routing_key, timeout = await self.__message_queue.get()
-                        await exchange.publish(
-                            message,
-                            routing_key,
-                            timeout=timeout
-                        )
         except Exception as e:
             logger.error(e, exc_info=self.__debug)
             delay_counter += 1
