@@ -83,6 +83,10 @@ class RBMQAsyncioClient:
                                                  max_size=self.__channel_max_count)
         
     async def destroy(self):
+        if self.__publisher_running and self.__message_queue.qsize() > 0:
+            shutdown_event = asyncio.Event()
+            await self.__message_queue.put(shutdown_event)
+            await shutdown_event.wait()
         self.__publisher_running = False
         await self.__channel_pool.close()
         await self.__connection_pool.close()
@@ -106,6 +110,11 @@ class RBMQAsyncioClient:
                         )
                         while self.__publisher_running:
                             item: Tuple[aio_pika.Message, str, int] = await self.__message_queue.get()
+                            
+                            if isinstance(item, asyncio.Event):
+                                item.set()
+                                continue
+
                             message = item[0]
                             routing_key = item[1]
                             publish_timeout = item[2]
