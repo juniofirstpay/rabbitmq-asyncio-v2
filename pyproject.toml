@@ -8,7 +8,7 @@ include = ["rbmq_aio_client"]
 
 [project]
 name = "rbmq-aio-client"
-version = "1.0.2"
+version = "1.0.3"
 authors = [
   { name="Rashmi Sahu", email="rashmi.sahu@junio.in" },
   { name="Nirbhay Gupta", email="nirbhay.gupta@junio.in" },

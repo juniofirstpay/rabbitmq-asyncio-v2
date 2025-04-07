@@ -83,41 +83,44 @@ class RBMQAsyncioClient:
                                                  max_size=self.__channel_max_count)
         
     async def destroy(self):
+        self.__publisher_running = False
         await self.__channel_pool.close()
         await self.__connection_pool.close()
 
 
     async def create_publisher(self, exchange_config: ExchangeConfig):
         delay_counter = 0
-        try:
-            async with self.__connection_pool, self.__channel_pool:
-                async with self.__channel_pool.acquire() as ch: # type: aio_pika.abc.AbstractChannel
-                    channel: aio_pika.abc.AbstractChannel = ch
-                    exchange: aio_pika.abc.AbstractExchange = await channel.declare_exchange(
-                        name=exchange_config.name,
-                        type=exchange_config.type,
-                        durable=exchange_config.durable,
-                        auto_delete=exchange_config.auto_delete,
-                        internal=exchange_config.internal,
-                        passive=exchange_config.passive,
-                        timeout=exchange_config.timeout
-                    )
-                    while True:
-                        item: Tuple[aio_pika.Message, str, int] = await self.__message_queue.get()
-                        message = item[0]
-                        routing_key = item[1]
-                        publish_timeout = item[2]
-                        confirmation = await exchange.publish(
-                            message,
-                            routing_key,
-                            timeout=publish_timeout
+        while self.__publisher_running:
+            try:
+                async with self.__connection_pool, self.__channel_pool:
+                    async with self.__channel_pool.acquire() as ch: # type: aio_pika.abc.AbstractChannel
+                        channel: aio_pika.abc.AbstractChannel = ch
+                        exchange: aio_pika.abc.AbstractExchange = await channel.declare_exchange(
+                            name=exchange_config.name,
+                            type=exchange_config.type,
+                            durable=exchange_config.durable,
+                            auto_delete=exchange_config.auto_delete,
+                            internal=exchange_config.internal,
+                            passive=exchange_config.passive,
+                            timeout=exchange_config.timeout
                         )
-                        logger.debug(f"message-delivery: {message.message_id}: {confirmation.delivery_tag}")
+                        while self.__publisher_running:
+                            item: Tuple[aio_pika.Message, str, int] = await self.__message_queue.get()
+                            message = item[0]
+                            routing_key = item[1]
+                            publish_timeout = item[2]
+                            confirmation = await exchange.publish(
+                                message,
+                                routing_key,
+                                timeout=publish_timeout
+                            )
+                            logger.debug(f"message-delivery: {message.message_id}: {confirmation.delivery_tag}")
 
-        except Exception as e:
-            logger.error(e, exc_info=self.__debug)
-            delay_counter += 1
-            await asyncio.sleep(delay_counter * 3)
+            except Exception as e:
+                logger.error(e, exc_info=self.__debug)
+                if self.__publisher_running == True:
+                    delay_counter += 1
+                    await asyncio.sleep(delay_counter * 3)
 
     async def create_subscriber(self, exchange_config: ExchangeConfig, queue_config: QueueConfig, callback: Callable[[Any], Awaitable[Any]]):
         delay_counter = 0
@@ -172,6 +175,7 @@ class RBMQAsyncioClient:
             await asyncio.sleep(delay_counter * 3)
 
     async def run_publisher(self, config: ExchangeConfig):
+        self.__publisher_running = True
         loop = asyncio.get_running_loop()
         return loop.create_task(self.create_publisher(config))
 
