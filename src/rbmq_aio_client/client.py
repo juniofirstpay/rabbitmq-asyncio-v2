@@ -109,7 +109,7 @@ class RBMQAsyncioClient:
                             timeout=exchange_config.timeout
                         )
                         while self.__publisher_running:
-                            item: Tuple[aio_pika.Message, str, int] = await self.__message_queue.get()
+                            item: Tuple[aio_pika.Message, str, int] | asyncio.Event = await self.__message_queue.get()
                             
                             if isinstance(item, asyncio.Event):
                                 item.set()
