@@ -93,10 +93,14 @@ class RBMQAsyncioClient:
 
 
     async def create_publisher(self, exchange_config: ExchangeConfig):
+        __close_event: asyncio.Event = None
         delay_counter = 0
         while self.__publisher_running:
             try:
                 async with self.__connection_pool, self.__channel_pool:
+                    if self.__channel_pool.is_closed:
+                        return
+                    
                     async with self.__channel_pool.acquire() as ch: # type: aio_pika.abc.AbstractChannel
                         channel: aio_pika.abc.AbstractChannel = ch
                         exchange: aio_pika.abc.AbstractExchange = await channel.declare_exchange(
@@ -112,8 +116,7 @@ class RBMQAsyncioClient:
                             item: Tuple[aio_pika.Message, str, int] | asyncio.Event = await self.__message_queue.get()
                             
                             if isinstance(item, asyncio.Event):
-                                item.set()
-                                self.__publisher_running = False
+                                __close_event = item
                                 raise Exception("stop-publisher")                                
 
                             message = item[0]
@@ -128,7 +131,9 @@ class RBMQAsyncioClient:
 
             except Exception as e:
                 if str(e) == "stop-publisher":
-                    return
+                    await logger.info("closing publisher")
+                    __close_event.set()
+                    self.__publisher_running = False
                 
                 logger.error(e, exc_info=self.__debug)
                 if self.__publisher_running == True:
