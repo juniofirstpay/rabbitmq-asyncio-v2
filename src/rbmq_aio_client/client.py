@@ -127,7 +127,7 @@ class RBMQAsyncioClient:
                                 routing_key,
                                 timeout=publish_timeout
                             )
-                            logger.debug(f"message-delivery: {message.message_id}: {confirmation.delivery_tag}")
+                            await logger.ainfo(f"message-delivery: {message.message_id}: {confirmation.delivery_tag}")
 
             except Exception as e:
                 if str(e) == "stop-publisher":
