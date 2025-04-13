@@ -113,7 +113,8 @@ class RBMQAsyncioClient:
                             
                             if isinstance(item, asyncio.Event):
                                 item.set()
-                                continue
+                                self.__publisher_running = False
+                                raise Exception("stop-publisher")                                
 
                             message = item[0]
                             routing_key = item[1]
@@ -126,6 +127,9 @@ class RBMQAsyncioClient:
                             logger.debug(f"message-delivery: {message.message_id}: {confirmation.delivery_tag}")
 
             except Exception as e:
+                if str(e) == "stop-publisher":
+                    return
+                
                 logger.error(e, exc_info=self.__debug)
                 if self.__publisher_running == True:
                     delay_counter += 1
