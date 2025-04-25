@@ -277,14 +277,17 @@ class RBMQAsyncioClient:
             )
         )
 
-    async def run_healthcheck_server(self, port: int = 8000):
+    async def run_healthcheck_server(self, port: int = 8000, shutdown_event: asyncio.Event=None):
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.bind(("localhost", port))
         server.listen(8)
         server.setblocking(False)
-
         loop = asyncio.get_running_loop()
-
+        loop.create_task(self._health_check_server(loop, server, port))
+        await shutdown_event.wait()
+        server.close()
+    
+    async def _health_check_server(self, loop, server, port: int):
         while True:
             client, _ = await loop.sock_accept(server)
             await loop.sock_sendall(client, "pong".encode("utf-8"))
