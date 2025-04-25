@@ -104,6 +104,7 @@ class RBMQAsyncioClient:
             await logger.adebug("publisher stop relay received")
 
         if self.__subscriber_running:
+            self.__subscriber_running = False
             await self.__subscriber_stop_event.wait()
             await logger.adebug("subscriber stop relay received")
 
