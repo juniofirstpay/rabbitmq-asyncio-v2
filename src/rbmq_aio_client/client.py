@@ -5,6 +5,7 @@ import aio_pika.pool
 import aio_pika.tools
 import asyncio
 import socket
+import logging
 import asyncio.queues
 from contextlib import asynccontextmanager
 from structlog import get_logger
@@ -12,7 +13,9 @@ from dataclasses import dataclass
 from datetime import datetime, UTC
 from typing import Tuple, List, Awaitable, Any, Callable
 
+
 logger = get_logger(__name__)
+
 
 
 @dataclass
@@ -55,6 +58,7 @@ class RBMQAsyncioClient:
         self.__channel_max_count: int = config.channel_max_count
         self.__queue_max_size: int = config.queue_max_size
         self.__debug: bool = config.debug
+        logging.getLogger(__name__).setLevel(logging.DEBUG if self.__debug else logging.INFO)
 
     async def get_connection(self) -> aio_pika.abc.AbstractConnection:
         return await aio_pika.connect_robust(
@@ -98,24 +102,35 @@ class RBMQAsyncioClient:
         if self.__publisher_running:
             await self.__message_queue.put("stop")
             await self.__publisher_stop_event.wait()
+            await logger.adebug("publisher stop relay received")
 
         if self.__subscriber_running:
             await self.__subscriber_stop_event.wait()
+            await logger.adebug("subscriber stop relay received")
 
+        await logger.adebug("closing channel pool")
         await self.__channel_pool.close()
+        await logger.adebug("closing connection pool")
         await self.__connection_pool.close()
 
     async def create_publisher(
         self, exchange_config: ExchangeConfig, stop_event: asyncio.Event
     ):
+        await logger.adebug("starting publisher")
+        
         delay_counter = 0
+        
         while self.__publisher_running:
+            plogger = logger.bind(counter=delay_counter)    
             try:
+                if self.__channel_pool.is_closed:
+                    await plogger.adebug("breaking the loop since channel pool is already closed")
+                    break
                 async with self.__connection_pool, self.__channel_pool:
-                    if self.__channel_pool.is_closed:
-                        return
+                    await plogger.adebug("established channel pool + connection pool")
 
                     async with self.__channel_pool.acquire() as ch:  # type: aio_pika.abc.AbstractChannel
+                        await plogger.adebug("channel acquired")        
                         channel: aio_pika.abc.AbstractChannel = ch
                         exchange: aio_pika.abc.AbstractExchange = (
                             await channel.declare_exchange(
@@ -128,12 +143,17 @@ class RBMQAsyncioClient:
                                 timeout=exchange_config.timeout,
                             )
                         )
+                        await plogger.adebug("exchange published")        
                         while self.__publisher_running:
+                            await plogger.adebug("publisher inner iterator started")        
                             item: Tuple[aio_pika.Message, str, int] | str = (
                                 await self.__message_queue.get()
                             )
 
+                            await plogger.adebug("read an item off queue")
+
                             if isinstance(item, str) and item == "stop":
+                                await plogger.adebug("stop item read off the queue")
                                 raise Exception("stop-publisher")
 
                             message = item[0]
@@ -142,17 +162,23 @@ class RBMQAsyncioClient:
                             confirmation = await exchange.publish(
                                 message, routing_key, timeout=publish_timeout
                             )
+                            await plogger.adebug("message published")
                             await logger.ainfo(
                                 f"message-delivery: {message.message_id}: {confirmation.delivery_tag}"
                             )
 
             except Exception as e:
+                await plogger.adebug("captured an exception")
                 if str(e) == "stop-publisher":
+                    await plogger.adebug("stop publisher exception")
                     break
-
+                
                 logger.error(e, exc_info=self.__debug)
                 delay_counter += 1
+                await plogger.adebug("delay counter incremented")
                 await asyncio.sleep(delay_counter * 3)
+                await plogger.adebug("waking up to reconnect")
+        await plogger.adebug("setting event to relay publisher stop")
         stop_event.set()
 
     async def create_subscriber(
