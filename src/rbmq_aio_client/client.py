@@ -58,6 +58,8 @@ class RBMQAsyncioClient:
         self.__channel_max_count: int = config.channel_max_count
         self.__queue_max_size: int = config.queue_max_size
         self.__debug: bool = config.debug
+        self.__subscriber_running = False
+        self.__publisher_running = False
         logging.getLogger(__name__).setLevel(logging.DEBUG if self.__debug else logging.INFO)
 
     async def get_connection(self) -> aio_pika.abc.AbstractConnection:
@@ -96,9 +98,6 @@ class RBMQAsyncioClient:
         )
 
     async def destroy(self):
-        self.__subscriber_running = False
-        self.__publisher_running = False
-
         if self.__publisher_running:
             await self.__message_queue.put("stop")
             await self.__publisher_stop_event.wait()
