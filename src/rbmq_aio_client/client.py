@@ -216,36 +216,41 @@ class RBMQAsyncioClient:
                         for routing_key in queue_config.routing_keys:
                             await queue.bind(exchange=exchange, routing_key=routing_key)
 
-                        async with queue.iterator() as queue_iter:
-                            async for message in queue_iter:
+                        while self.__subscriber_running:
+                            message = await queue.get(timeout=1000, fail=False)
+
+                            if message is None:
                                 if self.__subscriber_running == False:
-                                    raise Exception("stop-subscriber")
+                                    break
+                                else:
+                                    await asyncio.sleep(0.2)
+                                    continue
+                            try:
+                                async with message.process(ignore_processed=True):
+                                    try:
+                                        payload = json.loads(message.body.decode())
+                                    except json.JSONDecodeError as e:
+                                        payload = ast.literal_eval(
+                                            message.body.decode()
+                                        )
+                                    except:
+                                        await message.reject()
 
-                                try:
-                                    async with message.process(ignore_processed=True):
-                                        try:
-                                            payload = json.loads(message.body.decode())
-                                        except json.JSONDecodeError as e:
-                                            payload = ast.literal_eval(
-                                                message.body.decode()
-                                            )
-                                        except:
+                                    try:
+                                        ack = await callback(payload)
+                                        if ack:
+                                            await message.ack()
+                                        else:
                                             await message.reject()
-
-                                        try:
-                                            ack = await callback(payload)
-                                            if ack:
-                                                await message.ack()
-                                            else:
-                                                await message.reject()
-                                        except Exception as e:
-                                            logger.error(e)
-                                            await message.reject(requeue=True)
-                                except Exception as e:
-                                    logger.error(e, exc_info=self.__debug)
+                                    except Exception as e:
+                                        logger.error(e)
+                                        await message.reject(requeue=True)
+                            except Exception as e:
+                                logger.error(e, exc_info=self.__debug)
             except Exception as e:
-                if str(e) == "stop-subscriber":
+                if self.__subscriber_running == False:
                     break
+                
                 logger.error(e, exc_info=self.__debug)
                 delay_counter += 1
                 await asyncio.sleep(delay_counter * 3)
