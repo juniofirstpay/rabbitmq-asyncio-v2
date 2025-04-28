@@ -7,6 +7,7 @@ import asyncio
 import socket
 import logging
 import asyncio.queues
+import concurrent.futures
 from contextlib import asynccontextmanager
 from structlog import get_logger
 from dataclasses import dataclass
@@ -58,8 +59,17 @@ class RBMQAsyncioClient:
         self.__channel_max_count: int = config.channel_max_count
         self.__queue_max_size: int = config.queue_max_size
         self.__debug: bool = config.debug
-        self.__subscriber_running = False
+        
         self.__publisher_running = False
+        self.__publisher_task = None
+        
+        self.__subscriber_task = None
+        self.__subscriber_running = False
+        
+        self.__socket_server = None
+        self.__healthcheck_server_running = False
+        self.__healthcheck_server_task = None
+        
         logging.getLogger(__name__).setLevel(logging.DEBUG if self.__debug else logging.INFO)
 
     async def get_connection(self) -> aio_pika.abc.AbstractConnection:
@@ -99,7 +109,6 @@ class RBMQAsyncioClient:
 
     async def destroy(self):
         if self.__publisher_running:
-            await self.__message_queue.put("stop")
             await self.__publisher_stop_event.wait()
             await logger.adebug("publisher stop relay received")
 
@@ -114,13 +123,13 @@ class RBMQAsyncioClient:
         await self.__connection_pool.close()
 
     async def create_publisher(
-        self, exchange_config: ExchangeConfig, stop_event: asyncio.Event
+        self, exchange_config: ExchangeConfig
     ):
         await logger.adebug("starting publisher")
         
         delay_counter = 0
         
-        while self.__publisher_running:
+        while (self.__publisher_running or self.__message_queue.qsize() > 0):
             plogger = logger.bind(counter=delay_counter)    
             try:
                 if self.__channel_pool.is_closed:
@@ -144,7 +153,7 @@ class RBMQAsyncioClient:
                             )
                         )
                         await plogger.adebug("exchange published")        
-                        while self.__publisher_running:
+                        while (self.__publisher_running or self.__message_queue.qsize() > 0):
                             await plogger.adebug("publisher inner iterator started")        
                             item: Tuple[aio_pika.Message, str, int] | str = (
                                 await self.__message_queue.get()
@@ -152,9 +161,9 @@ class RBMQAsyncioClient:
 
                             await plogger.adebug("read an item off queue")
 
-                            if isinstance(item, str) and item == "stop":
-                                await plogger.adebug("stop item read off the queue")
-                                raise Exception("stop-publisher")
+                            # if isinstance(item, str) and item == "stop":
+                            #     await plogger.adebug("stop item read off the queue")
+                            #     raise Exception("stop-publisher")
 
                             message = item[0]
                             routing_key = item[1]
@@ -169,9 +178,9 @@ class RBMQAsyncioClient:
 
             except Exception as e:
                 await plogger.adebug("captured an exception")
-                if str(e) == "stop-publisher":
-                    await plogger.adebug("stop publisher exception")
-                    break
+                # if str(e) == "stop-publisher":
+                #     await plogger.adebug("stop publisher exception")
+                #     break
                 
                 logger.error(e, exc_info=self.__debug)
                 delay_counter += 1
@@ -179,14 +188,12 @@ class RBMQAsyncioClient:
                 await asyncio.sleep(delay_counter * 3)
                 await plogger.adebug("waking up to reconnect")
         await plogger.adebug("setting event to relay publisher stop")
-        stop_event.set()
 
     async def create_subscriber(
         self,
         exchange_config: ExchangeConfig,
         queue_config: QueueConfig,
-        callback: Callable[[Any], Awaitable[Any]],
-        stop_event: asyncio.Event,
+        callback: Callable[[Any], Awaitable[Any]]
     ):
         delay_counter = 0
         while self.__subscriber_running:
@@ -220,12 +227,13 @@ class RBMQAsyncioClient:
                         while self.__subscriber_running:
                             message = await queue.get(timeout=1000, fail=False)
 
-                            if message is None:
-                                if self.__subscriber_running == False:
+                            if message is None and self.__subscriber_running == False:
                                     break
-                                else:
-                                    await asyncio.sleep(0.2)
-                                    continue
+                            elif message is None:
+                                await asyncio.sleep(0.2)
+                                continue
+
+
                             try:
                                 async with message.process(ignore_processed=True):
                                     try:
@@ -248,22 +256,19 @@ class RBMQAsyncioClient:
                                         await message.reject(requeue=True)
                             except Exception as e:
                                 logger.error(e, exc_info=self.__debug)
-            except Exception as e:
+                        
+                        
                 if self.__subscriber_running == False:
                     break
-                
+            except Exception as e:
                 logger.error(e, exc_info=self.__debug)
                 delay_counter += 1
                 await asyncio.sleep(delay_counter * 3)
-        stop_event.set()
 
     async def run_publisher(self, config: ExchangeConfig):
         self.__publisher_running = True
-        self.__publisher_stop_event = asyncio.Event()
         loop = asyncio.get_running_loop()
-        return loop.create_task(
-            self.create_publisher(config, stop_event=self.__publisher_stop_event)
-        )
+        self.__publisher_task = loop.create_task(self.create_publisher(config))
 
     async def run_subscriber(
         self,
@@ -272,29 +277,26 @@ class RBMQAsyncioClient:
         callback: Callable[[Any], Awaitable[Any]],
     ):
         self.__subscriber_running = True
-        self.__subscriber_stop_event = asyncio.Event()
         loop = asyncio.get_running_loop()
-        return loop.create_task(
+        self.__subscriber_task = loop.create_task(
             self.create_subscriber(
                 exchange_config,
                 queue_config,
                 callback,
-                stop_event=self.__subscriber_stop_event,
             )
         )
 
-    async def run_healthcheck_server(self, port: int = 8000, shutdown_event: asyncio.Event=None):
-        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server.bind(("localhost", port))
-        server.listen(8)
-        server.setblocking(False)
+    async def run_healthcheck_server(self, port: int = 8000):
+        self.__healthcheck_server_running = True
+        self.__socket_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.__socket_server.bind(("localhost", port))
+        self.__socket_server.listen(8)
+        self.__socket_server.setblocking(False)
         loop = asyncio.get_running_loop()
-        loop.create_task(self._health_check_server(loop, server, port))
-        await shutdown_event.wait()
-        server.close()
+        self.__healthcheck_server_task = loop.create_task(self._health_check_server(loop, self.__socket_server, port))
     
     async def _health_check_server(self, loop, server, port: int):
-        while True:
+        while self.__healthcheck_server_running:
             client, _ = await loop.sock_accept(server)
             await loop.sock_sendall(client, "pong".encode("utf-8"))
             client.close()
@@ -320,3 +322,22 @@ class RBMQAsyncioClient:
         await self.__message_queue.put((message, routing_key, publish_timeout))
 
         return self
+
+
+    async def shutdown(self):
+        self.__healthcheck_server_running = False
+        self.__subscriber_running = False
+        self.__publisher_running = False
+
+        tasks = []
+        if self.__publisher_task:
+            tasks.append(self.__publisher_task)
+        
+        if self.__subscriber_task:
+            tasks.append(self.__subscriber_task)
+        
+        if self.__healthcheck_server_task:
+            tasks.append(self.__healthcheck_server_task)
+
+        _ = concurrent.futures.wait(tasks, timeout=None, return_when=concurrent.futures.ALL_COMPLETED)
+        
