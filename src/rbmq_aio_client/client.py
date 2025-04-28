@@ -119,7 +119,9 @@ class RBMQAsyncioClient:
         if self.__publisher_task:
             tasks.append(self.__publisher_task)
 
+        await logger.adebug("before wait")
         _ = concurrent.futures.wait(tasks, timeout=None, return_when=concurrent.futures.ALL_COMPLETED)
+        await logger.adebug("after wait")
 
         await logger.adebug("closing channel pool")
         await self.__channel_pool.close()
@@ -134,7 +136,7 @@ class RBMQAsyncioClient:
         delay_counter = 0
         
         while (self.__publisher_running or self.__message_queue.qsize() > 0):
-            plogger = logger.bind(counter=delay_counter)    
+            plogger = logger.bind(counter=delay_counter, type="publisher")    
             try:
                 if self.__channel_pool.is_closed:
                     await plogger.adebug("breaking the loop since channel pool is already closed")
@@ -158,10 +160,15 @@ class RBMQAsyncioClient:
                         )
                         await plogger.adebug("exchange published")        
                         while (self.__publisher_running or self.__message_queue.qsize() > 0):
-                            await plogger.adebug("publisher inner iterator started")        
-                            item: Tuple[aio_pika.Message, str, int] | str = (
-                                await self.__message_queue.get()
-                            )
+                            # await plogger.adebug("publisher inner iterator started")        
+                            try:
+                                item: Tuple[aio_pika.Message, str, int] | str = self.__message_queue.get_nowait()
+                            except asyncio.QueueEmpty:
+                                if self.__publisher_running == False:
+                                    break
+                                else:
+                                    await asyncio.sleep(0.2)
+                                    continue
 
                             await plogger.adebug("read an item off queue")
 
@@ -191,6 +198,10 @@ class RBMQAsyncioClient:
                 await plogger.adebug("delay counter incremented")
                 await asyncio.sleep(delay_counter * 3)
                 await plogger.adebug("waking up to reconnect")
+            
+            await logger.adebug("publisher-running", value=self.__publisher_running)
+            if self.__publisher_running == False:
+                break
 
     async def create_subscriber(
         self,
@@ -200,9 +211,15 @@ class RBMQAsyncioClient:
     ):
         delay_counter = 0
         while self.__subscriber_running:
+            plogger = logger.bind(counter=delay_counter, type="subscriber")    
             try:
+                if self.__channel_pool.is_closed:
+                    await plogger.adebug("breaking the loop since channel pool is already closed")
+                    break
                 async with self.__connection_pool, self.__channel_pool:
+                    await plogger.adebug("established channel pool + connection pool")
                     async with self.__channel_pool.acquire() as ch:  # type: aio_pika.abc.AbstractChannel
+                        await plogger.adebug("channel acquired")        
                         channel: aio_pika.abc.AbstractChannel = ch
                         exchange: aio_pika.abc.AbstractExchange = (
                             await channel.declare_exchange(
@@ -215,27 +232,30 @@ class RBMQAsyncioClient:
                                 timeout=exchange_config.timeout,
                             )
                         )
+                        await plogger.adebug("exchange published")
                         queue: aio_pika.Queue = await channel.declare_queue(
                             name=queue_config.name,
                             durable=queue_config.durable,
                             auto_delete=queue_config.auto_delete,
                             exclusive=queue_config.exclusive,
                         )
+                        await plogger.adebug("queue declared")
                         await channel.set_qos(
                             prefetch_count=queue_config.prefetch_count
                         )
                         for routing_key in queue_config.routing_keys:
                             await queue.bind(exchange=exchange, routing_key=routing_key)
 
+                        await plogger.adebug("subscriber iterator starting")
                         while self.__subscriber_running:
                             message = await queue.get(timeout=1000, fail=False)
 
                             if message is None and self.__subscriber_running == False:
-                                    break
+                                await plogger.adebug("breaking the inner loop")
+                                break
                             elif message is None:
                                 await asyncio.sleep(0.2)
                                 continue
-
 
                             try:
                                 async with message.process(ignore_processed=True):
@@ -261,12 +281,13 @@ class RBMQAsyncioClient:
                                 logger.error(e, exc_info=self.__debug)
                         
                         
-                if self.__subscriber_running == False:
-                    break
             except Exception as e:
                 logger.error(e, exc_info=self.__debug)
                 delay_counter += 1
                 await asyncio.sleep(delay_counter * 3)
+            await plogger.adebug("is_subscriber_running", value=self.__subscriber_running)
+            if self.__subscriber_running == False:
+                    break
 
     async def run_publisher(self, config: ExchangeConfig):
         self.__publisher_running = True
@@ -280,13 +301,10 @@ class RBMQAsyncioClient:
         callback: Callable[[Any], Awaitable[Any]],
     ):
         self.__subscriber_running = True
-        loop = asyncio.get_running_loop()
-        self.__subscriber_task = loop.create_task(
-            self.create_subscriber(
-                exchange_config,
-                queue_config,
-                callback,
-            )
+        await self.create_subscriber(
+            exchange_config,
+            queue_config,
+            callback,
         )
 
     async def run_healthcheck_server(self, port: int = 8000):
@@ -296,10 +314,11 @@ class RBMQAsyncioClient:
         self.__socket_server.listen(8)
         self.__socket_server.setblocking(False)
         loop = asyncio.get_running_loop()
-        await self._health_check_server(loop, self.__socket_server, port)
+        self.__healthcheck_server_task = loop.create_task(self._health_check_server(loop, self.__socket_server, port))
     
     async def _health_check_server(self, loop, server, port: int):
         while self.__healthcheck_server_running:
+            await logger.adebug("running healthcheck server loop")
             client, _ = await loop.sock_accept(server)
             await loop.sock_sendall(client, "pong".encode("utf-8"))
             client.close()
@@ -328,10 +347,15 @@ class RBMQAsyncioClient:
 
 
     async def shutdown(self):
-        self.__healthcheck_server_running = False
+        if self.__socket_server:
+            await logger.adebug("calling for socket server close")
+            self.__socket_server.close()
+        
+        if self.__healthcheck_server_task:
+            self.__healthcheck_server_running = False
+            self.__healthcheck_server_task.cancel()
+        
         self.__subscriber_running = False
         self.__publisher_running = False
 
-        if self.__socket_server:
-            self.__socket_server.close()
         
