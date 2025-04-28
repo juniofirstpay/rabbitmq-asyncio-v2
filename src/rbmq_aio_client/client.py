@@ -108,14 +108,11 @@ class RBMQAsyncioClient:
         )
 
     async def destroy(self):
-        if self.__publisher_running:
-            await self.__publisher_stop_event.wait()
-            await logger.adebug("publisher stop relay received")
+        if self.__publisher_running == True:
+            self.__publisher_running = False
 
-        if self.__subscriber_running:
-            self.__subscriber_running = False
-            await self.__subscriber_stop_event.wait()
-            await logger.adebug("subscriber stop relay received")
+        if self.__message_queue.qsize() > 0:
+            _ = concurrent.futures.wait([self.__publisher_task])
 
         await logger.adebug("closing channel pool")
         await self.__channel_pool.close()
@@ -327,11 +324,8 @@ class RBMQAsyncioClient:
     async def shutdown(self):
         self.__healthcheck_server_running = False
         self.__subscriber_running = False
-        self.__publisher_running = False
-
+        
         tasks = []
-        if self.__publisher_task:
-            tasks.append(self.__publisher_task)
         
         if self.__subscriber_task:
             tasks.append(self.__subscriber_task)
