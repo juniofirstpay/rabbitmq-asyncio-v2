@@ -110,9 +110,16 @@ class RBMQAsyncioClient:
     async def destroy(self):
         if self.__publisher_running == True:
             self.__publisher_running = False
+        
+        tasks = []
+        
+        if self.__subscriber_task:
+            tasks.append(self.__subscriber_task)
+        
+        if self.__publisher_task:
+            tasks.append(self.__publisher_task)
 
-        if self.__message_queue.qsize() > 0:
-            _ = concurrent.futures.wait([self.__publisher_task])
+        _ = concurrent.futures.wait(tasks, timeout=None, return_when=concurrent.futures.ALL_COMPLETED)
 
         await logger.adebug("closing channel pool")
         await self.__channel_pool.close()
@@ -184,7 +191,6 @@ class RBMQAsyncioClient:
                 await plogger.adebug("delay counter incremented")
                 await asyncio.sleep(delay_counter * 3)
                 await plogger.adebug("waking up to reconnect")
-        await plogger.adebug("setting event to relay publisher stop")
 
     async def create_subscriber(
         self,
@@ -290,7 +296,7 @@ class RBMQAsyncioClient:
         self.__socket_server.listen(8)
         self.__socket_server.setblocking(False)
         loop = asyncio.get_running_loop()
-        self.__healthcheck_server_task = loop.create_task(self._health_check_server(loop, self.__socket_server, port))
+        await self._health_check_server(loop, self.__socket_server, port)
     
     async def _health_check_server(self, loop, server, port: int):
         while self.__healthcheck_server_running:
@@ -324,14 +330,8 @@ class RBMQAsyncioClient:
     async def shutdown(self):
         self.__healthcheck_server_running = False
         self.__subscriber_running = False
-        
-        tasks = []
-        
-        if self.__subscriber_task:
-            tasks.append(self.__subscriber_task)
-        
-        if self.__healthcheck_server_task:
-            tasks.append(self.__healthcheck_server_task)
+        self.__publisher_running = False
 
-        _ = concurrent.futures.wait(tasks, timeout=None, return_when=concurrent.futures.ALL_COMPLETED)
+        if self.__socket_server:
+            self.__socket_server.close()
         
