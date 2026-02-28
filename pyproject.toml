@@ -22,7 +22,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies=[
-    "addict==2.4.0",
+    "addict",
     "aio-pika==9.4.3",
     "structlog"
 ]
